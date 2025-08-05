@@ -1,0 +1,32 @@
+# Use Raspberry Pi compatible Python image
+FROM balenalib/raspberrypi3-python:3.9-bullseye
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libatlas-base-dev \
+    libhdf5-dev \
+    libhdf5-serial-dev \
+    libqtgui4 \
+    libqt4-test \
+    libopenjp2-7 \
+    libilmbase-dev \
+    libopenexr-dev \
+    libgstreamer1.0-dev \
+    libgtk2.0-dev \
+    libswscale-dev \
+    libv4l-dev \
+    libzbar0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Enable camera interface
+ENV LD_PRELOAD=/usr/lib/arm-linux-gnueabihf/libatomic.so.1
+
+CMD ["python3", "main_ai.py"]

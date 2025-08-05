@@ -1,37 +1,56 @@
 services:
+  # PostgreSQL Database
   db:
-    image: postgres:15
+    image: postgres:15-alpine
     environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
-      POSTGRES_DB: ${DB_NAME:-supermarket}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: supermarket
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  backend:
-    build: ./backend
-    environment:
-      DB_USER: ${DB_USER:-postgres}  
-      DB_PASSWORD: ${DB_PASSWORD:-secret}
-      DB_NAME: ${DB_NAME:-supermarket}
-      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-secret}@db:5432/${DB_NAME:-supermarket}?schema=public
+  # Node.js Online Platform
+  online-platform:
+    build:
+      context: ./online-shopping
+    ports:
+      - "5000:5000"
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "5000:5000"
+    environment:
+      DB_HOST: db
+      DB_USER: postgres
+      DB_PASSWORD: secret
+      DB_NAME: supermarket
+      DB_PORT: 5432
 
-  frontend:
-    build: ./frontend
-    ports:
-      - "80:80"
+  # Python Offline System
+  offline-system:
+    build:
+      context: ./src
+      dockerfile: Dockerfile.python
+    platform: linux/arm/v7
+    privileged: true
+    devices:
+    - "/dev/video0:/dev/video0"  # Camera device
+    - "/dev/gpiomem:/dev/gpiomem"  # GPIO access
+    volumes:
+    - /sys:/sys
     depends_on:
-      - backend
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_USER: postgres
+      DB_PASSWORD: secret
+      DB_NAME: supermarket
+      DB_PORT: 5432
 
 volumes:
-  postgres-data:
+  pgdata:
