@@ -1,11 +1,5 @@
-# Use ARM-compatible Node image for Raspberry Pi
-FROM balenalib/raspberrypi3-node:20-bullseye
-
-# Install OS dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    python3 \
-    && rm -rf /var/lib/apt/lists/*
+# Use official AMD64 Node image
+FROM node:20-bullseye-slim
 
 # Create app directory
 WORKDIR /usr/src/app

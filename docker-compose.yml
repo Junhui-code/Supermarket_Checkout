@@ -1,5 +1,6 @@
+version: '3.8'
+
 services:
-  # PostgreSQL Database
   db:
     image: postgres:15-alpine
     environment:
@@ -8,21 +9,12 @@ services:
       POSTGRES_DB: supermarket
     volumes:
       - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
-  # Node.js Online Platform
   online-platform:
     build:
-      context: ./online-shopping
+      context: ./Online shopping
     ports:
       - "5000:5000"
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
       DB_HOST: db
       DB_USER: postgres
@@ -30,27 +22,17 @@ services:
       DB_NAME: supermarket
       DB_PORT: 5432
 
-  # Python Offline System
   offline-system:
     build:
       context: ./src
       dockerfile: Dockerfile.python
-    platform: linux/arm/v7
-    privileged: true
-    devices:
-    - "/dev/video0:/dev/video0"  # Camera device
-    - "/dev/gpiomem:/dev/gpiomem"  # GPIO access
-    volumes:
-    - /sys:/sys
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
       DB_HOST: db
       DB_USER: postgres
       DB_PASSWORD: secret
       DB_NAME: supermarket
       DB_PORT: 5432
+      MOCK_HARDWARE: "true"
 
 volumes:
   pgdata:
