@@ -1,5 +1,5 @@
 # Use official AMD64 Node image
-FROM node:20-bullseye-slim
+FROM arm32v7/node:20-bullseye-slim
 
 # Create app directory
 WORKDIR /usr/src/app

@@ -1,5 +1,5 @@
 # Use official AMD64 Python image
-FROM python:3.9-slim-bullseye
+FROM arm32v7/python:3.9-slim-bullseye
 
 WORKDIR /app
 
