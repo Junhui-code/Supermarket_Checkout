@@ -2,41 +2,30 @@ version: '3.8'
 
 services:
   db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: supermarket
+    image: postgres:13-alpine
+    env_file: .env
     volumes:
       - pgdata:/var/lib/postgresql/data
 
   online-platform:
-    build:
+    build: 
       context: ./online-platform
+      dockerfile: Dockerfile
+    env_file: .env
     ports:
-      - "5000:5000"
-    environment:
-      DB_HOST: db
-      DB_USER: postgres
-      DB_PASSWORD: secret
-      DB_NAME: supermarket
-      DB_PORT: 5432
+      - "80:5000"
     depends_on:
       - db
 
   offline-system:
-    build:
+    build: 
       context: ./offline-system
-    environment:
-      DB_HOST: db
-      DB_USER: postgres
-      DB_PASSWORD: secret
-      DB_NAME: supermarket
-      DB_PORT: 5432
-      BASE_URL: "http://online-platform:5000/api"
-    devices:
-      - "/dev/vchiq:/dev/vchiq"  # Camera access
+      dockerfile: Dockerfile
     privileged: true
+    devices:
+      - "/dev/vchiq:/dev/vchiq"
+      - "/dev/gpiomem:/dev/gpiomem"
+    env_file: .env
     depends_on:
       - online-platform
 
