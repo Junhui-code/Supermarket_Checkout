@@ -1,19 +1,18 @@
-# Use official AMD64 Python image
-FROM arm32v7/python:3.9-slim-bullseye
+FROM balenalib/raspberrypi3-python:3.9-bullseye
 
 WORKDIR /app
 
-# Install only essential dependencies
+# Minimal system dependencies
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
     libzbar0 \
+    libcamera0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application
 COPY . .
 
-CMD ["python", "main_ai.py"]
+CMD ["python", "main.py"]

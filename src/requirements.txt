@@ -1,7 +1,5 @@
-opencv-python-headless==4.5.4.60
-pyzbar==0.1.9
-requests==2.31.0
-picamera2==0.3.13
-numpy==1.21.6
 Flask==2.2.5
 psycopg2-binary==2.9.6
+picamera2==0.3.14
+pyzbar==0.1.9
+RPi.GPIO==0.7.1
