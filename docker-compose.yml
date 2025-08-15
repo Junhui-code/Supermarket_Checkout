@@ -1,33 +1,30 @@
 version: '3.8'
-
 services:
   db:
     image: postgres:13-alpine
     env_file: .env
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
 
   online-platform:
-    build: 
+    build:
       context: ./online-platform
       dockerfile: Dockerfile
     env_file: .env
     ports:
       - "80:5000"
     depends_on:
-      - db
-
-  offline-system:
-    build: 
-      context: ./offline-system
-      dockerfile: Dockerfile
-    privileged: true
-    devices:
-      - "/dev/vchiq:/dev/vchiq"
-      - "/dev/gpiomem:/dev/gpiomem"
-    env_file: .env
-    depends_on:
-      - online-platform
-
-volumes:
-  pgdata:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
