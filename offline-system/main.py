@@ -205,7 +205,7 @@ def fetch_product_by_barcode(barcode):
     except Exception as e:
         print(f"[ERROR] Fetching product: {str(e)}")
         return None
-
+  
 def scan_barcode(lcd):
     global total, items_scanned, scanned_items
     
@@ -229,27 +229,47 @@ def scan_barcode(lcd):
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
-    # Simple thresholding
-    _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
-    
-    # Try to decode barcode
-    results = decode(thresh, symbols=[ZBarSymbol.EAN13, ZBarSymbol.CODE128])
-    
-    if results:
-        for barcode in results:
-            code = barcode.data.decode("utf-8")
-            product = fetch_product_by_barcode(code)
-            if product:
-                product_name, price = product
-                total += price
-                items_scanned += 1
-                scanned_items.append((product_name, price))
-                update_display(lcd, product_name, price, total)
-                time.sleep(1.5)  # Show product for 1.5 seconds
-                return
+    # Enhance the image using CLAHE
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+
+    # Save the enhanced image for debugging
+    debug_path = f"/home/pi/ET0735/debug_images/enhanced_{timestamp}.png"
+    cv2.imwrite(debug_path, enhanced)
+    print(f"[DEBUG] Saved enhanced image at: {debug_path}")
+
+    # Try different rotations to improve barcode decoding
+    rotations = {
+        "0": enhanced,
+        "90": cv2.rotate(enhanced, cv2.ROTATE_90_CLOCKWISE),
+        "180": cv2.rotate(enhanced, cv2.ROTATE_180),
+        "270": cv2.rotate(enhanced, cv2.ROTATE_90_COUNTERCLOCKWISE),
+    }
+
+    # Attempt barcode decoding on rotated images
+    for angle, rotated in rotations.items():
+        print(f"[INFO] Trying decode at {angle}° rotation")
+        results = decode(rotated, symbols=[ZBarSymbol.EAN13, ZBarSymbol.CODE128])
+        
+        if results:
+            for barcode in results:
+                code = barcode.data.decode("utf-8")
+                print(f"[INFO] Barcode found: {code}")
+                
+                # Check if the barcode is in the product database
+                if len(code) == 10 and code in productDB:
+                    product_name, price = productDB[code]
+                    total += price
+                    items_scanned += 1
+                    scanned_items.append((product_name, price))
+                    update_display(lcd, product_name, price, total)
+                    time.sleep(1.5)  # Show product for 1.5 seconds
+                    return
     
     # If no barcode found
+    print("[FAIL] No barcode could be read.")
     invalid_barcode_display(lcd)
+
 
 def display_order_items(lcd, items):
     lcd.lcd_clear()
@@ -266,61 +286,68 @@ def display_order_items(lcd, items):
 
 def scan_qr_code(lcd):
     lcd.lcd_clear()
-    lcd.lcd_display_string("Scan QR Code", 1)
+    lcd.lcd_display_string("Scanning QR Code", 1)
     lcd.lcd_display_string("Please wait...", 2)
+    print("[INFO] Initializing camera for QR...")
 
-    # Initialize camera
     picam2 = Picamera2()
-    config = picam2.create_preview_configuration(main={"size": (800, 600)})
+    config = picam2.create_preview_configuration(main={"size": (1296, 972)})  # Ensure the same size as no.1
     picam2.configure(config)
     picam2.start()
-    time.sleep(1.5)  # Reduced sleep time
+    time.sleep(2)
 
     # Capture image
-    image = picam2.capture_array()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    raw_path = f"/home/pi/ET0735/debug_images/qrcode_{timestamp}.jpg"
+    picam2.capture_file(raw_path)
     picam2.stop()
     picam2.close()
 
-    # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Try to decode QR code
-    decoded = decode(gray, symbols=[ZBarSymbol.QRCODE])
+    print(f"[INFO] QR Image captured: {raw_path}")
+    image = cv2.imread(raw_path)
+    if image is None:
+        print("[ERROR] Cannot load QR image.")
+        lcd.lcd_display_string("Camera Error", 1)
+        return
 
-    if decoded:
-        qr_data = decoded[0].data.decode('utf-8')
-        
-        # Parse QR data (format: PICKUP:<orderId>|CODE:<pickupCode>)
-        if qr_data.startswith("PICKUP:") and "|CODE:" in qr_data:
-            parts = qr_data.split('|')
-            order_id = parts[0].replace("PICKUP:", "")
-            pickup_code = parts[1].replace("CODE:", "")
-            
-            # Verify pickup code
-            try:
-                response = requests.get(f"{BASE_URL}/orders/{order_id}")
-                if response.status_code == 200:
-                    order_data = response.json()
-                    if order_data['order']['pickup_code'] == pickup_code:
-                        lcd.lcd_clear()
-                        lcd.lcd_display_string("Order Verified!", 1)
-                        lcd.lcd_display_string("Collect items", 2)
-                        time.sleep(2)
-                        
-                        # Display order items
-                        display_order_items(lcd, order_data['items'])
-                        return
-            except Exception as e:
-                print(f"Order verification error: {str(e)}")
-        
-        lcd.lcd_clear()
-        lcd.lcd_display_string("Invalid QR", 1)
-        lcd.lcd_display_string("Try again", 2)
-    else:
-        lcd.lcd_clear()
-        lcd.lcd_display_string("No QR detected", 1)
-        lcd.lcd_display_string("Try again", 2)
-    
+    # Image Enhancement Step (same as in no.1)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    clahe_img = clahe.apply(gray)
+    enhanced = cv2.resize(clahe_img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+
+    # Rotate image for better decoding
+    rotations = {
+        "0": enhanced,
+        "90": cv2.rotate(enhanced, cv2.ROTATE_90_CLOCKWISE),
+        "180": cv2.rotate(enhanced, cv2.ROTATE_180),
+        "270": cv2.rotate(enhanced, cv2.ROTATE_90_COUNTERCLOCKWISE),
+    }
+
+    for angle, rotated in rotations.items():
+        print(f"[INFO] Trying decode at {angle}° rotation")
+        results = decode(rotated, symbols=[ZBarSymbol.QRCODE])
+        if results:
+            for qr_code in results:
+                qr_data = qr_code.data.decode('utf-8')
+                print(f"[QR] Decoded data: {qr_data}")
+
+                if "ORD-" in qr_data:
+                    lcd.lcd_clear()
+                    lcd.lcd_display_string("Order Collected!", 1)
+                    lcd.lcd_display_string(qr_data[:16], 2)
+                    print(f"[INFO] Order ID: {qr_data} is collected")
+                else:
+                    lcd.lcd_display_string("QR Invalid", 1)
+                    lcd.lcd_display_string("Try again", 2)
+                    print("[WARN] QR Code found, but not valid order ID")
+                return
+
+    # If no QR code found
+    lcd.lcd_clear()
+    lcd.lcd_display_string("No QR detected", 1)
+    lcd.lcd_display_string("Try again", 2)
+    print("[FAIL] QR code could not be read")
     time.sleep(2)
 
 

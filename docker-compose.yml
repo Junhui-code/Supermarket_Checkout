@@ -1,33 +1,49 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:13-alpine
     env_file: .env
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
 
   online-platform:
-    build: 
+    build:
       context: ./online-platform
       dockerfile: Dockerfile
     env_file: .env
     ports:
       - "80:5000"
     depends_on:
-      - db
-
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+      
   offline-system:
     build: 
       context: ./offline-system
-      dockerfile: Dockerfile
+      dockerfile: ./Dockerfile
     privileged: true
     devices:
-      - "/dev/vchiq:/dev/vchiq"
-      - "/dev/gpiomem:/dev/gpiomem"
+      - "/dev/vchiq:/dev/vchiq"          # VC interface (needed for camera access)
+      - "/dev/gpiomem:/dev/gpiomem"      # GPIO memory access (for GPIO pins)
+      - "/dev/i2c-1:/dev/i2c-1"          # I2C bus (for sensors like DHT, LCD)
+      - "/dev/spidev0.0:/dev/spidev0.0"  # SPI bus (for RFID)
+      - "/dev/spidev0.1:/dev/spidev0.1"  # SPI bus (another RFID SPI channel)
+      - "/dev/video0:/dev/video0"        # Camera node (for Picamera2)
     env_file: .env
     depends_on:
       - online-platform
+    network_mode: "host"                 # To access localhost:80 of online-platform directly
 
 volumes:
   pgdata:
