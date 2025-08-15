@@ -52,6 +52,19 @@ system_warn = None
 DEBUG_DIR = "/home/pi/ET0735/debug_images"
 os.makedirs(DEBUG_DIR, exist_ok=True)
 
+FALLBACK_PRODUCTS = {
+    "1234567890": ("Milk", 3.00),
+    "1111222233": ("Bread", 2.00),
+    "6677889900": ("Eggs", 3.50),
+    "4444555566": ("Cheese", 4.50),
+    "7777888899": ("Butter", 2.75),
+    "3333444455": ("Yogurt", 1.25),
+    "8888999900": ("Apple", 0.75),
+    "2222333344": ("Banana", 0.50),
+    "5555666677": ("Orange", 0.85)
+}
+
+
 def key_pressed(key):
     shared_keypad_queue.put(key)
 
@@ -202,8 +215,10 @@ def fetch_product_by_barcode(barcode):
             return response.json()  # Return the full product object
         return None
     except Exception as e:
-        print(f"[ERROR] Fetching product: {str(e)}")
-        return None
+        print(f"[ERROR] Using fallback products: {str(e)}")
+        return {'name': FALLBACK_PRODUCTS[barcode][0], 
+                'price': FALLBACK_PRODUCTS[barcode][1]} \
+            if barcode in FALLBACK_PRODUCTS else None
 
 def scan_barcode(lcd):
     global total, items_scanned, scanned_items
@@ -530,7 +545,7 @@ def test_db_connection():
             print(f"DB connection failed: {response.status_code}")
     except Exception as e:
         print(f"DB connection test failed: {str(e)}")
-        
+
 def main():
     # Initialize hardware
     keypad.init(key_pressed)
