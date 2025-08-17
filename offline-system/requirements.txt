@@ -1,2 +1,7 @@
+Flask==3.1.1
 numpy
+pyserial==3.5b0
+pyzbar==0.1.9
 requests
+spi==0.2.0
+mfrc522==0.0.7

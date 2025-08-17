@@ -49,8 +49,21 @@ scanned_items = []
 system_warn = None
 
 # Debug directory for captured images
-DEBUG_DIR = "/home/pi/ET0735/debug_images"
+DEBUG_DIR = "/home/pi/test/Supermarket_Checkout/debug_images"
 os.makedirs(DEBUG_DIR, exist_ok=True)
+
+FALLBACK_PRODUCTS = {
+    "1234567890": ("Milk", 3.00),
+    "1111222233": ("Bread", 2.00),
+    "6677889900": ("Eggs", 3.50),
+    "4444555566": ("Cheese", 4.50),
+    "7777888899": ("Butter", 2.75),
+    "3333444455": ("Yogurt", 1.25),
+    "8888999900": ("Apple", 0.75),
+    "2222333344": ("Banana", 0.50),
+    "5555666677": ("Orange", 0.85)
+}
+
 
 def key_pressed(key):
     shared_keypad_queue.put(key)
@@ -199,13 +212,22 @@ def fetch_product_by_barcode(barcode):
     try:
         response = requests.get(f"{BASE_URL}/products/barcode/{barcode}")
         if response.status_code == 200:
-            product = response.json()
-            return (product['name'], float(product['price']))
+            return response.json()  # Return the full product object
         return None
     except Exception as e:
-        print(f"[ERROR] Fetching product: {str(e)}")
+        print(f"[ERROR] Using fallback products: {str(e)}")
+        return {'name': FALLBACK_PRODUCTS[barcode][0], 
+                'price': FALLBACK_PRODUCTS[barcode][1]} \
+            if barcode in FALLBACK_PRODUCTS else None
+
+def make_camera_or_none():
+    try:
+        cam = Picamera2()
+        return cam
+    except Exception as e:
+        print(f"[CAMERA] Not available: {e}")
         return None
-  
+
 def scan_barcode(lcd):
     global total, items_scanned, scanned_items
     
@@ -214,7 +236,7 @@ def scan_barcode(lcd):
     lcd.lcd_display_string("Point at barcode", 2)
 
     # Initialize camera
-    picam2 = Picamera2()
+    picam2 = make_camera_or_none()
     config = picam2.create_preview_configuration(main={"size": (800, 600)})
     picam2.configure(config)
     picam2.start()
@@ -256,20 +278,22 @@ def scan_barcode(lcd):
                 code = barcode.data.decode("utf-8")
                 print(f"[INFO] Barcode found: {code}")
                 
-                # Check if the barcode is in the product database
-                if len(code) == 10 and code in productDB:
-                    product_name, price = productDB[code]
+                product_info = fetch_product_by_barcode(code)
+                if product_info:
+                    product_name = product_info['name']
+                    price = float(product_info['price'])
                     total += price
                     items_scanned += 1
                     scanned_items.append((product_name, price))
                     update_display(lcd, product_name, price, total)
-                    time.sleep(1.5)  # Show product for 1.5 seconds
+                    time.sleep(1.5)
                     return
+                else:
+                    print(f"[ERROR] Product not found for barcode: {code}")
     
     # If no barcode found
     print("[FAIL] No barcode could be read.")
     invalid_barcode_display(lcd)
-
 
 def display_order_items(lcd, items):
     lcd.lcd_clear()
@@ -290,7 +314,7 @@ def scan_qr_code(lcd):
     lcd.lcd_display_string("Please wait...", 2)
     print("[INFO] Initializing camera for QR...")
 
-    picam2 = Picamera2()
+    picam2 = make_camera_or_none()
     config = picam2.create_preview_configuration(main={"size": (1296, 972)})  # Ensure the same size as no.1
     picam2.configure(config)
     picam2.start()
@@ -518,6 +542,18 @@ def device_on(lcd):
                     qr_code_mode(lcd)
                     break  # Return to main menu after QR mode
 
+
+def test_db_connection():
+    try:
+        print("Testing database connection...")
+        response = requests.get(f"{BASE_URL}/products")
+        if response.status_code == 200:
+            print(f"DB connection OK, found {len(response.json())} products")
+        else:
+            print(f"DB connection failed: {response.status_code}")
+    except Exception as e:
+        print(f"DB connection test failed: {str(e)}")
+
 def main():
     # Initialize hardware
     keypad.init(key_pressed)
@@ -534,6 +570,8 @@ def main():
     rfid_reader.init()
     usonic.init()
     dc_motor.init()
+
+    test_db_connection()
     
     # Start with power on
     power_on_display(lcd)
